@@ -1,0 +1,77 @@
+# This is programming codes to solve the Momentum equations and Continuity equations in order to get the velocity profile of
+# MHD flow in lid-driven cavity containing triangular block with parameters of Uniform magnetic field and Size of triangular block.
+# A Final Year Project of Muhammad Syazaniaiman Bin Mohd Shahimi suprvised by Dr Nor Raihan Binti Mohamad Asimoni under IIUM
+
+from __future__ import print_function
+from fenics import *
+from mshr import *
+from dolfin import *
+import matplotlib
+
+# Define mesh and geometry
+triangle = Polygon([Point(0.5, 0.7), Point(0.3, 0.3), Point(0.7, 0.3)])
+square = Polygon([Point(0.0, 0.0), Point(1.0, 0.0), Point(1.0, 1.0), Point(0.0, 1.0)])
+domain = square - triangle
+mesh = generate_mesh(domain, 50)
+
+test_pl = plot(mesh, title= " Cavity with triangular block (hole)")
+matplotlib.pyplot.xlabel("$x$")
+matplotlib.pyplot.ylabel("$y$")
+
+# Define vector element and finite element according to their order
+V = VectorElement("P", mesh.ufl_cell(), 2)
+P = FiniteElement("P", mesh.ufl_cell(), 1)
+VP = MixedElement([V, P])
+
+# Define function space
+W = FunctionSpace(mesh, VP)
+
+# Define test and trial functions
+(v, q) = TestFunctions(W)
+up = Function (W)
+(u, p) = split(up)
+
+# Boundary conditions
+
+lid_velocity = (1., 0.)
+lid_location = "near(x[1], 1.)"
+
+fixed_wall_velocity = (0., 0.)
+fixed_wall_locations = "near(x[0], 0.) | near(x[0], 1.) | near(x[1], 0.)"
+
+triangle_velocity = (0., 0.)
+triangle_locations = "on_boundary && x[0]>0.3 && x[0]<0.7 && x[1]>0,3 && x[1]<0.7"
+
+boundary_conditions = [
+    DirichletBC(W.sub(0), lid_velocity, lid_location),
+    DirichletBC(W.sub(0), fixed_wall_velocity, fixed_wall_locations),
+    DirichletBC(W.sub(0), triangle_velocity, triangle_locations)]
+    
+# Normal water density g/cm3
+rho = 1
+# Dynamic viscosity g/cm.s
+mu = 0.01
+# Electrical conductivity of normal water S/cm
+sigma = 0.5E-3
+# Uniform magnetic field strength T
+beta = 10
+
+# Define expressions used in variational forms as constant
+rho = Constant(rho)
+mu = Constant(mu)
+sigma = Constant(sigma)
+beta = Constant(beta)
+
+# Momentum and continuity combined weak forms
+F = rho*dot(dot(u, nabla_grad(u)), v)*dx + dot(grad(p), v)*dx + mu*inner(grad(u), grad(v))*dx + sigma*(beta**2)*dot(u, v)*dx \
++ dot(div(u), q)*dx
+
+J = derivative(F, up)
+problem = NonlinearVariationalProblem(F, up, boundary_conditions, J)
+solver = NonlinearVariationalSolver(problem)
+
+prm = solver.parameters
+prm['newton_solver']['linear_solver'] = 'mumps'
+# prm['newton_solver']['absolute_tolerance'] = 1E-4
+# prm['newton_solver']['relative_tolerance'] = 1E-4
+solver.solve()
